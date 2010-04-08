@@ -2,11 +2,13 @@
 
 use MP3::Info; $LIST_MP3 = 1;           # MP3 support - comment out if not needed
 use Ogg::Vorbis::Header; $LIST_OGG = 1; # OGG Vorbis Support - comment out if not needed
+use Audio::FLAC::Header; $LIST_FLAC = 1;           # FLAC support - comment out if not needed
 
 # Function prototypes:
 sub readFiles($);
 sub printMP3($$);
 sub printOGG($$);
+sub printFLAC($$);
 sub help();
 
 
@@ -56,6 +58,26 @@ print STDERR <<STOP
 STOP
 }
 
+
+###############################################################################
+# print a given FLAC
+sub printFLAC($$){
+	my $file = $_[0];
+   my $base = $_[1];
+   my $flac = new Audio::FLAC::Header($file);
+   my $sec = int($flac->{trackTotalLengthSeconds});
+   my $tags = $flac->tags();
+	my $artist = $flac->tags('ARTIST');
+	my $title = $flac->tags('TITLE');
+	my $tracknumber = $flac->tags('TRACKNUMBER');
+
+	if ($artist ne '' || $title ne ''){
+	  print ("#EXTINF:$sec,$title\n");
+        }else{
+          print ("#EXTINF:$sec,$base\n");
+        }
+	print ("$base.flac\n");
+}
 
 ###############################################################################
 # print a given MP3
@@ -119,7 +141,6 @@ sub readFiles($) {
     next if ($file =~ /^\.|\.\.$/);  #skip upper dirs
     my $fullFilename = "$path/$file";
     
-    
     if (-d $fullFilename) {
       readFiles($fullFilename); #Recursion
       next;
@@ -127,6 +148,11 @@ sub readFiles($) {
     
     if ($LIST_MP3 && $file =~ /^(.*)\.mp3$/i) {
       printMP3($fullFilename,$1); #print MP3-Infos
+      next;
+    }
+
+    if ($LIST_FLAC && $file =~ /^(.*)\.flac$/i) {
+      printFLAC($fullFilename,$1); #print FLAC-Infos
       next;
     }
 
