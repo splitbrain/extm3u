@@ -2,6 +2,9 @@
 
 # auto load modules
 use Module::Load::Conditional qw[check_install];
+use File::Basename;
+use Data::Dumper;
+use Getopt::Std;
 
 if(check_install(module => 'MP3::Info') ){
     Module::Load::load('MP3::Info');
@@ -19,15 +22,18 @@ if(check_install(module => 'Audio::FLAC::Header') ){
 }
 
 # Function prototypes:
-sub readFiles($);
-sub printMP3($$);
-sub printOGG($$);
-sub printFLAC($$);
+sub printFiles($$$$);
+sub readFiles($$);
+sub getMP3($);
+sub getOGG($);
+sub getFLAC($);
 sub help();
 
 
 ############################################################################
 # Main
+
+getopts('r',\%OPT);
 
 if (@ARGV != 1){
   help();
@@ -37,7 +43,18 @@ if (@ARGV != 1){
 my $mp3root = $ARGV[0];
 $mp3root =~ s/\/$//; #remove trailing slash
 print ("#EXTM3U\n"); # print the extended header
-readFiles($mp3root);
+
+# gather or print the files
+my @all = readFiles($mp3root,$OPT{'r'});
+
+# randomize output
+if($OPT{'r'}){
+    fisher_yates_shuffle(\@all);
+    foreach my $file (@all){
+        printFile($$file[0],$$file[1][0],$$file[1][1],$$file[1][2]);
+    }
+}
+
 
 ############################################################################
 # prints a short Help text
@@ -48,9 +65,10 @@ sub help() {
 
 print STDERR <<STOP
 
-      Syntax: extm3u.pl <music-dir>
+      Usage: extm3u.pl [-r] <music-dir>
 
-      music-dir This directory will be recursivly searched for audio files
+      -r           Randomize playlist order (heavy memory use)
+      <music-dir>  Search this directory recursivly for audio files
 
       This tool generates a extended .m3u playlist from a given directory
       for use with XMMS, Winamp (tm) and other music players.
@@ -82,30 +100,22 @@ STOP
 
 
 ###############################################################################
-# print a given FLAC
-sub printFLAC($$){
+# get a given FLAC
+sub getFLAC($){
     my $file = $_[0];
-    my $base = $_[1];
     my $flac = new Audio::FLAC::Header($file);
+
     my $sec = int($flac->{trackTotalLengthSeconds});
-    my $tags = $flac->tags();
     my $artist = $flac->tags('ARTIST');
     my $title = $flac->tags('TITLE');
-    my $tracknumber = $flac->tags('TRACKNUMBER');
 
-    if ($artist ne '' || $title ne ''){
-        print ("#EXTINF:$sec,$title\n");
-    }else{
-        print ("#EXTINF:$sec,$base\n");
-    }
-    print ("$base.flac\n");
+    return [$sec,$artist,$title];
 }
 
 ###############################################################################
-# print a given MP3
-sub printMP3($$){
+# get a given MP3
+sub getMP3($){
     my $file = $_[0];
-    my $base = $_[1];
     my $info = MP3::Info::get_mp3info($file);
     my $tag  = MP3::Info::get_mp3tag($file);
 
@@ -113,19 +123,13 @@ sub printMP3($$){
     my $artist = $tag->{ARTIST};
     my $title  = $tag->{TITLE};
 
-    if ($artist ne '' || $title ne ''){
-        print ("#EXTINF:$sec,$artist - $title\n");
-    }else{
-        print ("#EXTINF:$sec,$base\n");
-    }
-    print ("$file\n");
+    return [$sec,$artist,$title];
 }
 
 ###############################################################################
-# print a given OGG
-sub printOGG($$){
+# get a given OGG
+sub getOGG($){
     my $file = $_[0];
-    my $base = $_[1];
     my $ogg  = new Ogg::Vorbis::Header($file);
     return if(!defined($ogg)); # this is no ogg
 
@@ -142,6 +146,19 @@ sub printOGG($$){
         $title =  ($ogg->comment($1))[0];
     }
 
+    return [$sec,$artist,$title];
+}
+
+##############################################################################
+# Print extended file info
+sub printFile($$$$){
+    $file   = $_[0];
+    $sec    = $_[1];
+    $artist = $_[2];
+    $title  = $_[3];
+
+    $base = basename($file,['.mp3','.ogg','.fla','.flac']);
+
     if ($artist ne '' || $title ne ''){
         print ("#EXTINF:$sec,$artist - $title\n");
     }else{
@@ -152,40 +169,57 @@ sub printOGG($$){
 
 ##############################################################################
 # Read a given directory and its subdirectories
-sub readFiles($) {
-    (my $path)=@_;
+sub readFiles($$) {
+    my $path = $_[0];
+    my $rand = $_[1];
 
     opendir(ROOT, $path);
     my @files = readdir(ROOT);
     closedir(ROOT);
 
+    my @allfiles;
+
     foreach my $file (sort(@files)) {
-        next if ($file =~ /^\.|\.\.$/);  #skip upper dirs
+        next if ($file =~ /^\./);  #skip upper dirs and hidden files
         my $fullFilename = "$path/$file";
 
         if (-d $fullFilename) {
-            readFiles($fullFilename); #Recursion
-            next;
-        }
+            # recursion
+            push(@allfiles,readFiles($fullFilename,$rand));
+        } else {
+            # get audio file infos
+            my $info = undef;
+            if ($LIST_MP3 && $file =~ /^(.*)\.mp3$/i) {
+                $info = getMP3($fullFilename);
+            } elsif ($LIST_FLAC && $file =~ /^(.*)\.flac$/i) {
+                $info = getFLAC($fullFilename);
+            } elsif ($LIST_OGG && $file =~ /^(.*)\.ogg$/i) {
+                $info = getOGG($fullFilename);
+            }
 
-        if ($LIST_MP3 && $file =~ /^(.*)\.mp3$/i) {
-            printMP3($fullFilename,$1); #print MP3-Infos
-            next;
+            # output file
+            if($info){
+                if($rand){
+                    push(@allfiles,[$fullFilename,$info]);
+                }else{
+                    printFile($fullFilename,$$info[0],$$info[1],$$info[2]);
+                }
+            }
         }
-
-        if ($LIST_FLAC && $file =~ /^(.*)\.flac$/i) {
-            printFLAC($fullFilename,$1); #print FLAC-Infos
-            next;
-        }
-
-        if ($LIST_OGG && $file =~ /^(.*)\.ogg$/i) {
-            printOGG($fullFilename,$1); #print OGG-Infos
-            next;
-        }
-
     }
+    return @allfiles;
 }
 
-
+# fisher_yates_shuffle( \@array ) : generate a random permutation
+# of @array in place
+sub fisher_yates_shuffle {
+    my $array = shift;
+    my $i;
+    for ($i = @$array; --$i; ) {
+        my $j = int rand ($i+1);
+        next if $i == $j;
+        @$array[$i,$j] = @$array[$j,$i];
+    }
+}
 
 
