@@ -1,0 +1,14 @@
+This tool generates a extended .m3u playlist from a given directory
+for use with XMMS, Winamp (tm) and other music players.
+The playlist is printed to STDOUT. Extended .m3u files contain
+additional informations like length of the song and infos from
+the id3-tag.
+
+For running this script you'll need the following Perl modules:
+
+MP3::Info            for .mp3 files
+Ogg::Vorbis::Header  for .ogg files
+Audio::FLAC::Header  for .flac files
+
+The scripts autodetects which modules are installed. If a module is
+not installed, the corresponding file type is ignored
