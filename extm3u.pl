@@ -1,8 +1,22 @@
 #!/usr/bin/perl
 
-use MP3::Info; $LIST_MP3 = 1;            # MP3 support - comment out if not needed
-use Ogg::Vorbis::Header; $LIST_OGG = 1;  # OGG Vorbis Support - comment out if not needed
-use Audio::FLAC::Header; $LIST_FLAC = 1; # FLAC support - comment out if not needed
+# auto load modules
+use Module::Load::Conditional qw[check_install];
+
+if(check_install(module => 'MP3::Info') ){
+    Module::Load::load('MP3::Info');
+    $LIST_MP3 = 1;
+}
+
+if(check_install(module => 'Ogg::Vorbis::Header') ){
+    Module::Load::load('Ogg::Vorbis::Header');
+    $LIST_OGG = 1;
+}
+
+if(check_install(module => 'Audio::FLAC::Header') ){
+    Module::Load::load('Audio::FLAC::Header');
+    $LIST_FLAC = 1;
+}
 
 # Function prototypes:
 sub readFiles($);
@@ -28,27 +42,30 @@ readFiles($mp3root);
 ############################################################################
 # prints a short Help text
 sub help() {
+    my $mp3 = $LIST_MP3 ? 'found' : 'NOT found';
+    my $ogg = $LIST_OGG ? 'found' : 'NOT found';
+    my $fla = $LIST_FLAC ? 'found' : 'NOT found';
+
 print STDERR <<STOP
 
       Syntax: extm3u.pl <music-dir>
 
       music-dir This directory will be recursivly searched for audio files
 
-      This tool generates a extended .m3u playlist for use with XMMS,
-      Winamp (tm) and other MPEG layer 3 players from a given directory.
+      This tool generates a extended .m3u playlist from a given directory
+      for use with XMMS, Winamp (tm) and other music players.
       The playlist is printed to STDOUT. Extended .m3u files contain
-      additional informations like length of the song and Infos from
+      additional informations like length of the song and infos from
       the id3-tag.
 
       For running this script you'll need the following Perl modules:
 
-      MP3::Info            for .mp3 files
-      Ogg::Vorbis::Header  for .ogg files
-      Audio::FLAC::Header  for .flac files
+      MP3::Info            for .mp3 files   ($mp3)
+      Ogg::Vorbis::Header  for .ogg files   ($ogg)
+      Audio::FLAC::Header  for .flac files  ($fla)
 
-      Get them from CPAN or install the appropriate package of your
-      distribution. If you don't need suport for any of those comment
-      out the the appropriate line at the top of the script.
+      The scripts autodetects which modules are installed. If a module is
+      not installed, the corresponding file type is ignored
 
       _____________________________________________________________________
       extm3u.pl - Generates an extended .m3u mp3-Playlist
@@ -89,8 +106,8 @@ sub printFLAC($$){
 sub printMP3($$){
     my $file = $_[0];
     my $base = $_[1];
-    my $info = get_mp3info($file);
-    my $tag = get_mp3tag($file);
+    my $info = MP3::Info::get_mp3info($file);
+    my $tag  = MP3::Info::get_mp3tag($file);
 
     my $sec    = int($info->{SECS});
     my $artist = $tag->{ARTIST};
