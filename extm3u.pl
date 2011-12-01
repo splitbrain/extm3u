@@ -35,17 +35,19 @@ sub help();
 
 getopts('r',\%OPT);
 
-if (@ARGV != 1){
+if (@ARGV == 0){
   help();
   exit -1;
 }
 
-my $mp3root = $ARGV[0];
-$mp3root =~ s/\/$//; #remove trailing slash
 print ("#EXTM3U\n"); # print the extended header
+my @all;
+while(my $mp3root = shift(@ARGV)) {
+    $mp3root =~ s/\/$//; #remove trailing slash
 
 # gather or print the files
-my @all = readFiles($mp3root,$OPT{'r'});
+    push(@all, readFiles($mp3root,$OPT{'r'}));
+}
 
 # randomize output
 if($OPT{'r'}){
@@ -65,7 +67,7 @@ sub help() {
 
 print STDERR <<STOP
 
-      Usage: extm3u.pl [-r] <music-dir>
+      Usage: extm3u.pl [-r] <music-dir[s]>
 
       -r           Randomize playlist order (heavy memory use)
       <music-dir>  Search this directory recursivly for audio files
@@ -75,6 +77,9 @@ print STDERR <<STOP
       The playlist is printed to STDOUT. Extended .m3u files contain
       additional informations like length of the song and infos from
       the id3-tag.
+
+      If you give a '-' instead of a directory, it will read music file
+      paths from STDIN.
 
       For running this script you'll need the following Perl modules:
 
@@ -157,7 +162,7 @@ sub printFile($$$$){
     $artist = $_[2];
     $title  = $_[3];
 
-    $base = basename($file,['.mp3','.ogg','.fla','.flac']);
+    $base = basename($file,['.mp3','.ogg','.fla','.flac','.wav']);
 
     if ($artist ne '' || $title ne ''){
         print ("#EXTINF:$sec,$artist - $title\n");
@@ -173,36 +178,43 @@ sub readFiles($$) {
     my $path = $_[0];
     my $rand = $_[1];
 
-    opendir(ROOT, $path);
-    my @files = readdir(ROOT);
-    closedir(ROOT);
+    my @files;
+    if($path eq '-') {
+       @files = <STDIN>;
+       chomp(@files);
+    } else {
+       opendir(ROOT, $path);
+       @files = map { $path . '/' . $_ } grep { $_ !~ /^\./ } readdir(ROOT);
+       closedir(ROOT);
+    }
 
     my @allfiles;
 
     foreach my $file (sort(@files)) {
-        next if ($file =~ /^\./);  #skip upper dirs and hidden files
-        my $fullFilename = "$path/$file";
-
-        if (-d $fullFilename) {
+        if (-d $file) {
             # recursion
-            push(@allfiles,readFiles($fullFilename,$rand));
+            if($path ne '-') {
+               push(@allfiles,readFiles($file,$rand));
+            }
         } else {
             # get audio file infos
             my $info = undef;
-            if ($LIST_MP3 && $file =~ /^(.*)\.mp3$/i) {
-                $info = getMP3($fullFilename);
-            } elsif ($LIST_FLAC && $file =~ /^(.*)\.flac$/i) {
-                $info = getFLAC($fullFilename);
-            } elsif ($LIST_OGG && $file =~ /^(.*)\.ogg$/i) {
-                $info = getOGG($fullFilename);
+            if ($LIST_MP3 && $file =~ /\.mp3$/i) {
+                $info = getMP3($file);
+            } elsif ($LIST_FLAC && $file =~ /\.flac?$/i) {
+                $info = getFLAC($file);
+            } elsif ($LIST_OGG && $file =~ /\.ogg$/i) {
+                $info = getOGG($file);
+            } elsif ($file =~ /\.(mp3|flac?|ogg|wav)$/i) { # audio file, but we dont understand it
+                $info = [];
             }
 
             # output file
             if($info){
                 if($rand){
-                    push(@allfiles,[$fullFilename,$info]);
+                    push(@allfiles,[$file,$info]);
                 }else{
-                    printFile($fullFilename,$$info[0],$$info[1],$$info[2]);
+                    printFile($file,$$info[0],$$info[1],$$info[2]);
                 }
             }
         }
