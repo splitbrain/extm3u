@@ -28,24 +28,27 @@ sub getMP3($);
 sub getOGG($);
 sub getFLAC($);
 sub help();
-
+sub init();
 
 ############################################################################
 # Main
 
-getopts('r',\%OPT);
+getopts('rl:',\%OPT);
 
 if (@ARGV == 0){
   help();
   exit -1;
 }
 
-print ("#EXTM3U\n"); # print the extended header
+my $lineend="\n";
+init();
+
+print ("#EXTM3U${lineend}"); # print the extended header
 my @all;
 while(my $mp3root = shift(@ARGV)) {
     $mp3root =~ s/\/$//; #remove trailing slash
 
-# gather or print the files
+    # gather or print the files
     push(@all, readFiles($mp3root,$OPT{'r'}));
 }
 
@@ -67,9 +70,12 @@ sub help() {
 
 print STDERR <<STOP
 
-      Usage: extm3u.pl [-r] <music-dir[s]>
+      Usage: extm3u.pl [-r] [-l LF|CRLF] <music-dir[s]>
 
       -r           Randomize playlist order (heavy memory use)
+      -l           Defines the lineend character(s) to be used
+         LF        use linefeed as lineend character (default)
+         CRLF      use carriage return + linefeed as lineend characters
       <music-dir>  Search this directory recursivly for audio files
 
       This tool generates a extended .m3u playlist from a given directory
@@ -83,9 +89,9 @@ print STDERR <<STOP
 
       For running this script you'll need the following Perl modules:
 
-      MP3::Info            for .mp3 files   ($mp3)
-      Ogg::Vorbis::Header  for .ogg files   ($ogg)
-      Audio::FLAC::Header  for .flac files  ($fla)
+      MP3::Info            for .mp3 files   (module $mp3)
+      Ogg::Vorbis::Header  for .ogg files   (module $ogg)
+      Audio::FLAC::Header  for .flac files  (module $fla)
 
       The scripts autodetects which modules are installed. If a module is
       not installed, the corresponding file type is ignored
@@ -165,11 +171,11 @@ sub printFile($$$$){
     $base = basename($file,['.mp3','.ogg','.fla','.flac','.wav']);
 
     if ($artist ne '' || $title ne ''){
-        print ("#EXTINF:$sec,$artist - $title\n");
+        print ("#EXTINF:$sec,$artist - $title${lineend}");
     }else{
-        print ("#EXTINF:$sec,$base\n");
+        print ("#EXTINF:$sec,$base${lineend}");
     }
-    print ("$file\n");
+    print ("$file${lineend}");
 }
 
 ##############################################################################
@@ -234,4 +240,17 @@ sub fisher_yates_shuffle {
     }
 }
 
-
+# define lineend characters
+sub init() {
+    if ($OPT{l}) {
+    my $opt_parm=uc($OPT{l});
+        if ($opt_parm eq 'CRLF') {
+        $lineend="\r\n";
+        } elsif ($opt_parm eq 'LF') {
+        # use the default LF
+        } else {
+        print STDERR "parameter '${opt_parm}' is unknown for option -l ${lineend}";
+            exit -1;
+        }
+    }
+}
