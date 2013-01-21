@@ -28,22 +28,30 @@ sub getMP3($);
 sub getOGG($);
 sub getFLAC($);
 sub help();
-
+sub init();
 
 ############################################################################
 # Main
 
-getopts('r',\%OPT);
+getopts('rp:',\%OPT);
 
 if (@ARGV == 0){
   help();
   exit -1;
 }
 
+my $filesep="/";
+init();
+
 print ("#EXTM3U\n"); # print the extended header
 my @all;
 while(my $mp3root = shift(@ARGV)) {
-    $mp3root =~ s/\/$//; #remove trailing slash
+    # remove trailing slashes
+    if ("$^O" eq "MSWin32") {
+        $mp3root =~ s/\\*$//;
+    } else {    
+        $mp3root =~ s/\/*$//;
+    }
 
 # gather or print the files
     push(@all, readFiles($mp3root,$OPT{'r'}));
@@ -70,6 +78,9 @@ print STDERR <<STOP
       Usage: extm3u.pl [-r] <music-dir[s]>
 
       -r           Randomize playlist order (heavy memory use)
+      -p           Defines the file separator to be used in the paths
+         UNIX      use a slash "/" as file separator (default)
+         DOS       use a backslash "\\" as file separator
       <music-dir>  Search this directory recursivly for audio files
 
       This tool generates a extended .m3u playlist from a given directory
@@ -169,6 +180,9 @@ sub printFile($$$$){
     }else{
         print ("#EXTINF:$sec,$base\n");
     }
+    if ("$filesep" eq "\\") {
+        $file =~ s/\//\\/;
+    }
     print ("$file\n");
 }
 
@@ -234,4 +248,17 @@ sub fisher_yates_shuffle {
     }
 }
 
-
+# define global settings
+sub init() {
+    if ($OPT{p}) {
+        my $opt_parm=uc($OPT{p});
+        if ($opt_parm eq 'DOS') {
+            $filesep="\\";
+        } elsif ($opt_parm eq 'UNIX') {
+            # use the default '/'
+        } else {
+            print STDERR "parameter '${opt_parm}' is unknown for option -p ${filesep}";
+            exit -1;
+        }
+    }
+}
